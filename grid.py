@@ -33,6 +33,7 @@ copy_imagen_binarizada = imagen_binarizada.copy()
 mask_afilter = np.zeros_like(imagen_binarizada)
 img_etiqueta, num_etiqueta = label(imagen_binarizada, connectivity=2,return_num=True)
 region = regionprops(img_etiqueta)
+font = cv2.FONT_HERSHEY_DUPLEX
 
 for prop in region:
     if prop.area >= 1500 or prop.area <= 50:
@@ -44,6 +45,7 @@ imagen_binarizada = imagen_binarizada - mask_afilter
 img_etiqueta, num_etiqueta = label(imagen_binarizada, connectivity=2,return_num=True)
 region = regionprops(img_etiqueta)
 
+
 #limitacion del recuadro que contiene el mosquito   
 for prop in region:
     x_c, y_c, w_c, h_c = prop.bbox
@@ -52,7 +54,7 @@ for prop in region:
     except:
         mos = cv2.resize(img[x_c:w_c,y_c:h_c,:], None,fx=5 , fy=5)
          
-    cv2.imshow('mosquito', mos) 
+    #cv2.imshow('mosquito', mos) 
     
     w, h = L[x_c:w_c,y_c:h_c].shape
     L_mean = np.sum(np.sum(L[x_c:w_c,y_c:h_c]))/(w*h)
@@ -60,14 +62,23 @@ for prop in region:
     
     X_data = np.array([L_mean, B_mean]).reshape((1,2))
     probabilidad = nn.predict_proba(X_data)
-    if probabilidad[0][1] >= 0.6:
+    if probabilidad[0][1] >= 0.75:
+        cv2.rectangle(img, (y_c, x_c), (h_c, w_c), (0,255,0),2)
+        
+        cv2.putText(img, 'Mosquito', (y_c, x_c - 8), font, 0.4, (0,255,0), 1,cv2.LINE_AA)
+        cv2.putText(img, str(round(probabilidad[0][1],2)), (y_c + 60, x_c - 8), font, 0.4, (0,255,0), 1,cv2.LINE_AA)
         print('Es un mosquito con probabilidad de ' + str(probabilidad[0][1]))
     else:
         print('No es mosquito')
         
-    k = cv2.waitKey(0)
+    #k = cv2.waitKey(0)
     
-    if k == 27: 
-        cv2.destroyAllWindows()
-        break
+    #if k == 27: 
+        #cv2.destroyAllWindows()
+        #break
 
+fig = plt.gcf()
+fig.set_size_inches(38, 20)
+plt.axis("off")
+plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+plt.show()
