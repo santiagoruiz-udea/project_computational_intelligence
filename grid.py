@@ -71,22 +71,3 @@ for prop in region:
         cv2.destroyAllWindows()
         break
 
-
-#for i in range (0, W//w):
-#    for j in range (0, H//h):
-#        
-#        cv2.imshow('Fondo',img[w*i:w*(i+1),h*j:h*(j+1)])
-#        
-#        L_mean = np.sum(np.sum(L[w*i:w*(i+1),h*j:h*(j+1)]))/(w*h)
-#        B_mean = np.sum(np.sum(b[w*i:w*(i+1),h*j:h*(j+1)]))/(w*h)
-#        X_data = np.array([L_mean, B_mean]).reshape((1,2))
-#        probabilidad = nn.predict_proba(X_data)
-#        if probabilidad[0][1] >= 0.6:
-#            print('Es un mosquito con probabilidad de ' + str(probabilidad[0][1]))
-#        else:
-#            print('No es mosquito')
-#            
-#        k = cv2.waitKey(0)
-#        if k == 27: 
-#            cv2.destroyAllWindows()
-#            break
