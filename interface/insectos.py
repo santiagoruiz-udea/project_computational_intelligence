@@ -34,8 +34,26 @@ from xlsxwriter import Workbook                                     # Module for
 from skimage.measure import label, regionprops                      # Additional images processing module
 from PyQt5 import QtCore, QtGui, uic, QtWidgets                     # Additional elements of PyQt5 module 
 from PyQt5.QtWidgets import QMessageBox                             # Module to asking the user a question and receiving an answer
+from PyQt5.QtGui import QCursor
+import pandas as pd
+import joblib
+from skimage.measure import label, regionprops
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import train_test_split 
+from PyQt5.QtWidgets import QPushButton,QVBoxLayout
 
-
+import sys
+try:
+    from PyQt5.QtCore import Qt, QT_VERSION_STR
+    from PyQt5.QtGui import QImage
+    from PyQt5.QtWidgets import QApplication, QFileDialog
+except ImportError:
+    try:
+        from PyQt4.QtCore import Qt, QT_VERSION_STR
+        from PyQt4.QtGui import QImage, QApplication, QFileDialog
+    except ImportError:
+        raise ImportError("Requires PyQt5 or PyQt4.")
+from QtImageViewer import QtImageViewer
 
 
 """ ----------------------------------------------------------------------------------------------------------------------------------------------
@@ -44,6 +62,18 @@ from PyQt5.QtWidgets import QMessageBox                             # Module to 
 qtCreatorFile = "Interfaz.ui"                                       # Name of the GUI created using the Qt designer
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)          # The .ui file is imported to generate the graphical interface
 
+qtCreatorFile = "results.ui"                                       # Name of the GUI created using the Qt designer
+Ui_results, QtBaseClass = uic.loadUiType(qtCreatorFile)          # The .ui file is imported to generate the graphical interface
+
+class Second(QtWidgets.QMainWindow, Ui_results):
+    def __init__(self,  *args, **kwargs):
+        QtWidgets.QMainWindow.__init__(self,*args,**kwargs)
+        self.setupUi(self)
+        
+        self.lb_udea.setMargin(3)                                   # Logo UdeA
+        self.lb_gepar.setMargin(3)                                  # Logo GEPAR
+        self.lb_capiro.setMargin(3)                                 # Logo Capiro
+        
 # Implementation of the class MainWindow
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     
@@ -58,16 +88,27 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # Atributes
         self.image_path = 0
+        self.image = 0
         self.lb_udea.setPixmap(QtGui.QPixmap('LogoUdea.png'))       # Logo UdeA
-
+        self.lb_gepar.setPixmap(QtGui.QPixmap('LogoGepar.png'))     # Logo GEPAR
+        self.lb_capiro.setPixmap(QtGui.QPixmap('LogoCapiro.png'))   # Logo Capiro
+        
+        self.lb_udea.setMargin(3)                                   # Logo UdeA
+        self.lb_gepar.setMargin(3)                                  # Logo GEPAR
+        self.lb_capiro.setMargin(3)                                 # Logo Capiro
+                
         self.Importar.clicked.connect(self.Import_image)            # Connection of the button with the Import_image method call
         self.Start.clicked.connect(self.Start_execution)            # Connection of the button with the Start_execution method call
+        self.Results.clicked.connect(self.Show_results)          # Connection of the button with the Show_results method call
         self.Exit.clicked.connect(self.Exit_execution)              # Connection of the button with the Exit_execution method call
         self.setWindowIcon(QtGui.QIcon('udea.ico'))                 # Logo assignment (University's logo)
-
-    def Start_execution(self):	
-	    print('started')
-
+        self.frame_original = QtImageViewer(self)
+        self.frame_processed = QtImageViewer(self)
+        
+        self.frame_original.hide()
+        self.frame_processed.hide()
+        
+        
     """-------------------------------------- b. Choice of directory for reading the video --------------------------------------------------- """
     def Import_image(self):
         """  In this method, the file browser is enabled so that the user selects the video that will be analyzed. Some variables are 
@@ -76,38 +117,107 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             
         self.image_path, _ = QtWidgets.QFileDialog.getOpenFileName(self)   # File explorer is opened to select the video that will be used                     
         self.image = cv2.imread(self.image_path)                     # A video object is created according to the path selected
-        
+
         imagen_original=QtGui.QImage(self.image,self.image.shape[1],self.image.shape[0],self.image.shape[1]*self.image.shape[2],QtGui.QImage.Format_RGB888)
         frame_original = QtGui.QPixmap()
         frame_original.convertFromImage(imagen_original.rgbSwapped())
-        self.lb_Original.setPixmap(frame_original) 
-        # Initialization of the variables each time a video is imported
 
-                        
-    """------------------------------------------------ g.  Stopping the execution  --------------------------------------------------------"""       
-    def Stop_execution(self):
-        """ This method has no input parameters and is responsiblefor partially stopping frame capture by stopping the timer that controls
-            this process. Also, this method stores the results obtained so far in an Excel file."""
-            
-        self.Close_excel_file()     # The method for storing the statistical results in the Excel file is invoked
-        self.timer_1.stop()         # The timer is stopped
-        self.flag_stop = True       # The flag indicates that the execution was stopped
+        self.frame_original.setImage(frame_original)
+        self.frame_original.setGeometry(20, 50, 642, 483)
+        self.frame_original.setStyleSheet("background:  rgb(39, 108, 222); border: 1px solid rgb(39, 108, 222)")
+        self.frame_original.show()
+
+    """-------------------------------------- c. Predictions --------------------------------------------------- """
+    def Start_execution(self):
         
+        nn = joblib.load('../Implementación_RNA/modelo_entrenado.pkl') # Carga del modelo.
+        df = pd.read_excel('../Implementación_RNA/Clasificacion.xlsx')    #leectura de datos
+        
+        L, a, b, y_esperada = df["L"].values, df["A"].values, df["B"].values, df["Clase"].values
+        y_esperada[y_esperada == 0] = -1
+        
+        X = np.transpose(np.array([L, b]))
+        Y = y_esperada
+        X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size = 0.2, random_state = 0)
+        
+        #print(nn.score(X_test,Y_test))
+        
+        
+        img = self.image
+        Lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        L,a,b = cv2.split(Lab)
+        w = 64
+        h = 48
+        W,H,Z = img.shape
+        
+        ret,imagen_binarizada = cv2.threshold(L,60,255,cv2.THRESH_BINARY_INV)
+        copy_imagen_binarizada = imagen_binarizada.copy()
+        
+        mask_afilter = np.zeros_like(imagen_binarizada)
+        img_etiqueta, num_etiqueta = label(imagen_binarizada, connectivity=2,return_num=True)
+        region = regionprops(img_etiqueta)
+        font = cv2.FONT_HERSHEY_DUPLEX
+        
+        for prop in region:
+            if prop.area >= 1500 or prop.area <= 50:
+                x_c, y_c, w_c, h_c = prop.bbox
+                mask_afilter[x_c:w_c,y_c:h_c]= mask_afilter[x_c:w_c,y_c:h_c] | imagen_binarizada[x_c:w_c,y_c:h_c]
+        
+        imagen_binarizada = imagen_binarizada - mask_afilter
+        
+        img_etiqueta, num_etiqueta = label(imagen_binarizada, connectivity=2,return_num=True)
+        region = regionprops(img_etiqueta)
+        
+        
+        #limitacion del recuadro que contiene el mosquito   
+        for prop in region:
+            x_c, y_c, w_c, h_c = prop.bbox
+            try:
+                mos = cv2.resize(img[x_c-10:w_c+10,y_c-10:h_c+10,:], None,fx=5 , fy=5)
+            except:
+                mos = cv2.resize(img[x_c:w_c,y_c:h_c,:], None,fx=5 , fy=5)
+                 
+            #cv2.imshow('mosquito', mos) 
+            
+            w, h = L[x_c:w_c,y_c:h_c].shape
+            L_mean = np.sum(np.sum(L[x_c:w_c,y_c:h_c]))/(w*h)
+            B_mean = np.sum(np.sum(b[x_c:w_c,y_c:h_c]))/(w*h)
+            
+            X_data = np.array([L_mean, B_mean]).reshape((1,2))
+            probabilidad = nn.predict_proba(X_data)
+            if probabilidad[0][1] >= 0.75:
+                cv2.rectangle(img, (y_c, x_c), (h_c, w_c), (0,255,0),2)
+                
+                cv2.putText(img, 'Mosquito', (y_c, x_c - 8), font, 0.4, (0,255,0), 1,cv2.LINE_AA)
+                cv2.putText(img, str(round(probabilidad[0][1],2)), (y_c + 60, x_c - 8), font, 0.4, (0,255,0), 1,cv2.LINE_AA)
+
+        cv2.imwrite(self.image_path[:-4]+'_labeled.JPG', img)
+        processed = img
+        imagen_processed=QtGui.QImage(processed,processed.shape[1],processed.shape[0],processed.shape[1]*processed.shape[2],QtGui.QImage.Format_RGB888)
+        frame_processed = QtGui.QPixmap()
+        frame_processed.convertFromImage(imagen_processed.rgbSwapped())
+                
+        self.frame_processed.setImage(frame_processed)
+        self.frame_processed.setGeometry(700, 50, 642, 483)
+        self.frame_processed.setStyleSheet("background:  rgb(39, 108, 222); border: 1px solid rgb(39, 108, 222)")
+        self.frame_processed.show()
+        
+        self.Results.setStyleSheet("color: white; background:  rgb(39, 108, 222); border: 1px solid white; border-radius: 10px; font: 75 14pt 'Reboto Medium';")
+        self.Results.setCursor(QCursor(QtCore.Qt.PointingHandCursor))
+        
+    """------------------------------------------------ g.  Stopping the execution  --------------------------------------------------------"""       
+    def Show_results(self):
+        self.dialog = Second(self)
+ 
+        self.dialog.show()
+                
 
     """------------------------------------------------ h. Exiting the execution  --------------------------------------------------------"""
     def Exit_execution(self):
         """ This method has no input parameters and is responsible for definitely stopping frame capture by stopping the timer that controls 
             this process and exiting the MainWindow. Besides, this method stores the final results obtained in an Excel file and release the
             video input."""
-            
-        try:
-            self.video.release()     # The video object is released
-            self.Close_excel_file()  # The method for storing the statistical results in the Excel file is invoked
-        except:
-            pass
-        
-        self.timer_1.stop()         # The timer is stopped
-        plt.close()                 # The graph of the heart expansion is closed
+
         window.close()              # The graphical interface is closed
 
 # Main implementation      
@@ -119,6 +229,6 @@ if __name__ == "__main__":
     app =  QtWidgets.QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    quit(app.exec_())
+    sys.exit(app.exec_())
     
 
