@@ -42,6 +42,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split 
 from PyQt5.QtWidgets import QPushButton,QVBoxLayout
 
+
 import sys
 try:
     from PyQt5.QtCore import Qt, QT_VERSION_STR
@@ -107,6 +108,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         
         self.frame_original.hide()
         self.frame_processed.hide()
+        #Variables para calcular resultados
+        self.cont_incestos = 0
+        self.average_lenght = []
+        self.average_width = []
+        self.area = 0
         
         
     """-------------------------------------- b. Choice of directory for reading the video --------------------------------------------------- """
@@ -129,7 +135,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     """-------------------------------------- c. Predictions --------------------------------------------------- """
     def Start_execution(self):
-        
         nn = joblib.load('../Implementación_RNA/modelo_entrenado.pkl') # Carga del modelo.
         df = pd.read_excel('../Implementación_RNA/Clasificacion.xlsx')    #leectura de datos
         
@@ -150,7 +155,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         h = 48
         W,H,Z = img.shape
         
-        ret,imagen_binarizada = cv2.threshold(L,60,255,cv2.THRESH_BINARY_INV)
+        ret,imagen_binarizada = cv2.threshold(L,50,255,cv2.THRESH_BINARY_INV)
         copy_imagen_binarizada = imagen_binarizada.copy()
         
         mask_afilter = np.zeros_like(imagen_binarizada)
@@ -186,10 +191,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             X_data = np.array([L_mean, B_mean]).reshape((1,2))
             probabilidad = nn.predict_proba(X_data)
             if probabilidad[0][1] >= 0.75:
+                self.area += np.sum(copy_imagen_binarizada[x_c:w_c,y_c:h_c])
+
                 cv2.rectangle(img, (y_c, x_c), (h_c, w_c), (0,255,0),2)
-                
                 cv2.putText(img, 'Mosquito', (y_c, x_c - 8), font, 0.4, (0,255,0), 1,cv2.LINE_AA)
                 cv2.putText(img, str(round(probabilidad[0][1],2)), (y_c + 60, x_c - 8), font, 0.4, (0,255,0), 1,cv2.LINE_AA)
+                self.cont_incestos += 1
+                if h_c > w_c :
+                    self.average_lenght.append(h_c)
+                    self.average_width.append(w_c)
+                else:
+                    self.average_lenght.append(w_c)
+                    self.average_width.append(h_c)
+                    
 
         cv2.imwrite(self.image_path[:-4]+'_labeled.JPG', img)
         processed = img
@@ -208,9 +222,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     """------------------------------------------------ g.  Stopping the execution  --------------------------------------------------------"""       
     def Show_results(self):
         self.dialog = Second(self)
- 
+        self.dialog.label_result.setText(str(self.cont_incestos))
+        self.dialog.label_length.setText(str(round(sum(self.average_lenght)/len(self.average_lenght),2)) +' px')
+        self.dialog.label_width.setText(str(round(sum(self.average_width)/len(self.average_width),2)) +' px')
+        self.dialog.label_area.setText(str(self.area) +' px')
         self.dialog.show()
-                
+        self.dialog.Exit.clicked.connect(self.Exit_dialog)
+        
+    
+         
 
     """------------------------------------------------ h. Exiting the execution  --------------------------------------------------------"""
     def Exit_execution(self):
@@ -219,6 +239,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             video input."""
 
         window.close()              # The graphical interface is closed
+
+    """------------------------------------------------ i. Exiting the Dialog    --------------------------------------------------------"""
+    def Exit_dialog(self):
+        """ This method has no input parameters and is responsible for definitely stopping frame capture by stopping the timer that controls 
+            this process and exiting the Dialog. Besides, this method stores the final results obtained in an Excel file and release the
+            video input."""
+        self.dialog.close()
 
 # Main implementation      
 if __name__ == "__main__":
